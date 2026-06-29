@@ -1,0 +1,202 @@
+{
+  "name": "tg-autopost",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tg-autopost",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "tg-autopost"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"gpt-4o-mini\", \"messages\": [ {\"role\": \"system\", \"content\": \"Ти — класифікатор постів для українського новинного Telegram-каналу.\\n\\nТвоє завдання: визначити тип посту і повернути JSON-відповідь.\\n\\nТИПИ:\\n- \\\"news\\\" — реальна новина (військове, політика, кримінал, міжнародне, суспільство, НП)\\n- \\\"ad\\\" — реклама, промо, комерційна пропозиція, партнерський матеріал\\n- \\\"skip\\\" — опитування, стікери, сервісні повідомлення, пости без змісту, просто emoji\\n\\nОБОВ'ЯЗКОВІ ПРАВИЛА:\\n1. Пости з маркером ракетної небезпеки (🔴, \\\"ракетна небезпека\\\", \\\"повітряна тривога\\\", \\\"зліт МіГ\\\", \\\"Кинджал\\\") → завжди \\\"news\\\"\\n2. Якщо пост містить ціни, знижки, \\\"замов\\\", \\\"купи\\\", \\\"реклама\\\", посилання на магазин → \\\"ad\\\"\\n3. Якщо пост — лише опитування або мало символів без новинного змісту → \\\"skip\\\"\\n4. Репости та форварди реальних новин → \\\"news\\\"\\n\\nВідповідай ТІЛЬКИ валідним JSON: {\\\"type\\\": \\\"news\\\"} або {\\\"type\\\": \\\"ad\\\"} або {\\\"type\\\": \\\"skip\\\"}\"}, {\"role\": \"user\", \"content\": {{ JSON.stringify($json.body.text || \"\") }} } ], \"temperature\": 0, \"response_format\": { \"type\": \"json_object\" } }",
+        "options": {}
+      },
+      "id": "node-classifier",
+      "name": "Classifier (gpt-4o-mini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ JSON.parse($json.choices[0].message.content).type }}",
+              "rightValue": "news",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if",
+      "name": "Is news?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"model\": \"gpt-4o\", \"messages\": [ {\"role\": \"system\", \"content\": \"Ти — редактор українського новинного Telegram-каналу. Перепиши новину в стилі каналу.\\n\\nСТИЛЬ КАНАЛУ (дотримуйся суворо):\\n- Тон: різкий, динамічний, трохи клікбейтний — як сенсаційний агрегатор\\n- Мова: українська, коротко, без води\\n- Структура посту:\\n  [ЕМОДЗІ] **Жирний лід одним реченням — головна думка**\\n\\n  Коротке пояснення (1-2 речення, якщо є що додати).\\n\\n  Додаткова деталь або контекст (не обов'язково).\\n\\nПРАВИЛА ВИБОРУ ЕМОДЗІ:\\n- 🔴 — ракетна небезпека, тривога, зліт ворожої авіації (ТІЛЬКИ для цього)\\n- ‼️ — атаки, серйозні військові події, жертви, вибухи\\n- ⚡️ — гучна несподівана новина, курйоз, важлива заява\\n- ❗️ — кримінал, міжнародні події, важливе але не термінове\\n\\nЗАБОРОНЕНО:\\n- Не згадувати назву каналу-джерела, його username, посилання на нього\\n- Не писати \\\"за даними каналу X\\\", \\\"як повідомляє Y\\\" — просто факт\\n- Не додавати футер (його додає код автоматично)\\n- Не вигадувати факти яких немає в оригіналі\\n- Не перевищувати 3 абзаци тіла (для тривог — тільки лід без тіла)\\n\\nПРИКЛАДИ СТИЛЮ (реальні пости каналу):\\n\\nПриклад 1:\\n‼️ **У Великій Британії триває розробка нових ракет для України в межах оборонних програм, спрямованих на посилення далекобійних можливостей ЗСУ**\\n\\nЙдеться про кілька паралельних проєктів британської оборонної промисловості, які передбачають створення дешевших і швидших у виробництві ракетних систем як альтернативи наявним дорогим зразкам типу Storm Shadow.\\n\\nОкремо розглядається створення тактичних ракет наземного базування в межах ініціатив типу Project Nightfall.\\n\\nПриклад 2:\\n❗️ **У Нідерландах 42-річного уродженця України, якого підозрюють у нападі з ножем на ресторатора, затримали також у справі про зникнення людини у 2024 році**\\n\\nУ квітні 2024 року 36-річний чоловік вирушив на зустріч через застосунок знайомств і зник. Його велосипед знайшли у воді, тіло — досі ні.\\n\\nПідозрюваний раніше неодноразово потрапляв до поля зору поліції через крадіжки та погрози сусідам.\\n\\nПриклад 3 (коротке):\\n⚡️ **Зеленський надіслав Орден до Польщі через «Нову Пошту»**\\n\\nПриклад 4 (атака):\\n‼️ **У Запоріжжі масована атака російськими КАБами — під ударом інфраструктура та цивільні райони**\\n\\nЗа попередніми даними, ціллю могла бути зокрема ГЕС. Є загиблі, масштаби уточнюються.\\n\\nПриклад 5 (тривога — тільки лід):\\n🔴 **Вся Україна — ракетна небезпека. Зліт МіГ-31К ВПС рф, загроза застосування ракет Х-47М2 «Кинджал»**\"}, {\"role\": \"user\", \"content\": {{ JSON.stringify($('Webhook').item.json.body.text || \"\") }} } ], \"temperature\": 0.7 }",
+        "options": {}
+      },
+      "id": "node-rewriter",
+      "name": "Rewriter (gpt-4o)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content || \"\";\nlet t = raw.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\");\nt = t.replace(/\\*\\*(.+?)\\*\\*/g, \"<b>$1</b>\");\nconst footer = \"\\n\\n<a href=\\\"https://t.me/+XXXXXXXXXXXX\\\">📲 Новинний канал | Підписатись</a>\";\nreturn [{ json: { text: t + footer } }];"
+      },
+      "id": "node-format",
+      "name": "Format + Footer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"text\": $json.text } }}",
+        "options": {}
+      },
+      "id": "node-respond-news",
+      "name": "Respond (news)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"text\": \"\" } }}",
+        "options": {}
+      },
+      "id": "node-respond-skip",
+      "name": "Respond (skip)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Classifier (gpt-4o-mini)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classifier (gpt-4o-mini)": {
+      "main": [
+        [
+          {
+            "node": "Is news?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is news?": {
+      "main": [
+        [
+          {
+            "node": "Rewriter (gpt-4o)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond (skip)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rewriter (gpt-4o)": {
+      "main": [
+        [
+          {
+            "node": "Format + Footer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format + Footer": {
+      "main": [
+        [
+          {
+            "node": "Respond (news)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

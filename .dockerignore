@@ -1,0 +1,11 @@
+.env
+sessions/
+media/
+__pycache__/
+*.pyc
+*.session
+*.session-journal
+.git
+auth_qr.py
+check_channels.py
+n8n_workflow.json

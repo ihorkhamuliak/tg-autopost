@@ -1,0 +1,12 @@
+# Standalone userbot — запускається у власній папці /opt/userbot/
+# n8n чіпати не треба: userbot стукає в нього через публічний https URL з .env
+
+services:
+  userbot:
+    build: .
+    container_name: userbot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./sessions:/app/sessions
+      - ./media:/app/media
